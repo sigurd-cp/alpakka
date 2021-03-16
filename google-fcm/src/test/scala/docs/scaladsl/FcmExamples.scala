@@ -21,6 +21,7 @@ class FcmExamples {
   implicit val system = ActorSystem()
 
   //#init-credentials
+  //TODO rewrite the docs to use the google-common
   val privateKey =
     """-----BEGIN RSA PRIVATE KEY-----
       |MIIBOgIBAAJBAJHPYfmEpShPxAGP12oyPg0CiL1zmd2V84K5dgzhR9TFpkAp2kl2
@@ -40,14 +41,14 @@ class FcmExamples {
   val notification = FcmNotification("Test", "This is a test notification!", Token("token"))
   Source
     .single(notification)
-    .runWith(GoogleFcm.fireAndForget(fcmConfig))
+    .runWith(GoogleFcm.fireAndForget(maxConcurrentConnections = 8, isTest = true))
   //#simple-send
 
   //#asFlow-send
   val result1: Future[immutable.Seq[FcmResponse]] =
     Source
       .single(notification)
-      .via(GoogleFcm.send(fcmConfig))
+      .via(GoogleFcm.send(maxConcurrentConnections = 8, isTest = true))
       .map {
         case res @ FcmSuccessResponse(name) =>
           println(s"Successful $name")
@@ -63,7 +64,7 @@ class FcmExamples {
   val result2: Future[immutable.Seq[(FcmResponse, String)]] =
     Source
       .single((notification, "superData"))
-      .via(GoogleFcm.sendWithPassThrough(fcmConfig))
+      .via(GoogleFcm.sendWithPassThrough(maxConcurrentConnections = 8, isTest = true))
       .runWith(Sink.seq)
   //#withData-send
 

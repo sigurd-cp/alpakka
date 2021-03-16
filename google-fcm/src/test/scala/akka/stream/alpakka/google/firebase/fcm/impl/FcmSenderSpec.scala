@@ -5,12 +5,11 @@
 package akka.stream.alpakka.google.firebase.fcm.impl
 
 import akka.actor.ActorSystem
-import akka.event.LoggingAdapter
 import akka.http.scaladsl.model._
-import akka.http.scaladsl.settings.ConnectionPoolSettings
 import akka.http.scaladsl.unmarshalling.Unmarshal
-import akka.http.scaladsl.{HttpExt, HttpsConnectionContext}
+import akka.stream.alpakka.google.GoogleSettings
 import akka.stream.alpakka.google.firebase.fcm.{FcmErrorResponse, FcmNotification, FcmSettings, FcmSuccessResponse}
+import akka.stream.alpakka.google.http.GoogleHttp
 import akka.stream.alpakka.testkit.scaladsl.LogCapturing
 import akka.testkit.TestKit
 import org.mockito.ArgumentCaptor
@@ -50,65 +49,50 @@ class FcmSenderSpec
 
     "call the api as the docs want to" in {
       val sender = new FcmSender
-      val http = mock[HttpExt]
+      val gHttp = mock[GoogleHttp]
       when(
-        http.singleRequest(any[HttpRequest](),
-                           any[HttpsConnectionContext](),
-                           any[ConnectionPoolSettings](),
-                           any[LoggingAdapter]())
+        gHttp.singleRequestWithOAuth(any[HttpRequest]())(any[GoogleSettings]())
       ).thenReturn(
         Future.successful(HttpResponse(entity = HttpEntity(ContentTypes.`application/json`, """{"name": ""}""")))
       )
 
-      Await.result(sender.send(conf, "token", http, FcmSend(false, FcmNotification.empty), system),
-                   defaultPatience.timeout)
+      Await.result(sender.send(gHttp, FcmSend(false, FcmNotification.empty)), defaultPatience.timeout)
 
       val captor: ArgumentCaptor[HttpRequest] = ArgumentCaptor.forClass(classOf[HttpRequest])
-      verify(http).singleRequest(captor.capture(),
-                                 any[HttpsConnectionContext](),
-                                 any[ConnectionPoolSettings](),
-                                 any[LoggingAdapter]())
+      verify(gHttp).singleRequestWithOAuth(captor.capture())(any[GoogleSettings]())
       val request: HttpRequest = captor.getValue
       Unmarshal(request.entity).to[FcmSend].futureValue shouldBe FcmSend(false, FcmNotification.empty)
       request.uri.toString shouldBe "https://fcm.googleapis.com/v1/projects/projectId/messages:send"
-      request.headers.size shouldBe 1
-      request.headers.head should matchPattern { case HttpHeader("authorization", "Bearer token") => }
     }
 
     "parse the success response correctly" in {
       val sender = new FcmSender
-      val http = mock[HttpExt]
+      val gHttp = mock[GoogleHttp]
       when(
-        http.singleRequest(any[HttpRequest](),
-                           any[HttpsConnectionContext](),
-                           any[ConnectionPoolSettings](),
-                           any[LoggingAdapter]())
+        gHttp.singleRequestWithOAuth(any[HttpRequest]())(any[GoogleSettings]())
       ).thenReturn(
         Future.successful(HttpResponse(entity = HttpEntity(ContentTypes.`application/json`, """{"name": "test"}""")))
       )
 
       sender
-        .send(conf, "token", http, FcmSend(false, FcmNotification.empty), system)
+        .send(gHttp, FcmSend(false, FcmNotification.empty))
         .futureValue shouldBe FcmSuccessResponse("test")
     }
 
     "parse the error response correctly" in {
       val sender = new FcmSender
-      val http = mock[HttpExt]
+      val gHttp = mock[GoogleHttp]
       when(
-        http.singleRequest(any[HttpRequest](),
-                           any[HttpsConnectionContext](),
-                           any[ConnectionPoolSettings](),
-                           any[LoggingAdapter]())
+        gHttp.singleRequestWithOAuth(any[HttpRequest]())(any[GoogleSettings]())
       ).thenReturn(
         Future.successful(
           HttpResponse(status = StatusCodes.BadRequest,
-                       entity = HttpEntity(ContentTypes.`application/json`, """{"name":"test"}"""))
+                       entity = HttpEntity(ContentTypes.`application/json`, """{"name": "test"}"""))
         )
       )
 
       sender
-        .send(conf, "token", http, FcmSend(false, FcmNotification.empty), system)
+        .send(gHttp, FcmSend(false, FcmNotification.empty))
         .futureValue shouldBe FcmErrorResponse(
         """{"name":"test"}"""
       )

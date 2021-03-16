@@ -4,8 +4,11 @@
 
 package akka.stream.alpakka.google.firebase.fcm
 
-import java.util.Objects
+import akka.actor.ClassicActorSystemProvider
+import akka.http.scaladsl.model.headers.BasicHttpCredentials
+import akka.stream.alpakka.google
 
+import java.util.Objects
 import scala.compat.java8.OptionConverters._
 
 final class FcmSettings private (
@@ -195,6 +198,15 @@ final class ForwardProxy private (val host: String,
 
   override def hashCode(): Int =
     Objects.hash(host, Int.box(port), credentials)
+
+  def toCommonForwardProxy(implicit actorSystemProvider: ClassicActorSystemProvider): google.ForwardProxy =
+    akka.stream.alpakka.google.ForwardProxy(
+      "https",
+      host,
+      port,
+      credentials.map(c => BasicHttpCredentials(c.username, c.password)),
+      trustPem.map(_.pemPath)
+    )
 }
 
 object FcmSettings {

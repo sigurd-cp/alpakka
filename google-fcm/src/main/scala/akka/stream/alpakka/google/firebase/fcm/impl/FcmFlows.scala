@@ -4,9 +4,12 @@
 
 package akka.stream.alpakka.google.firebase.fcm.impl
 import akka.NotUsed
+import akka.actor.ActorSystem
 import akka.annotation.InternalApi
-import akka.http.scaladsl.Http
+import akka.stream.Materializer
+import akka.stream.alpakka.google.GoogleSettings
 import akka.stream.alpakka.google.firebase.fcm._
+import akka.stream.alpakka.google.http.GoogleHttp
 import akka.stream.scaladsl.Flow
 
 import scala.concurrent.Future
@@ -17,42 +20,38 @@ import scala.concurrent.Future
 @InternalApi
 private[fcm] object FcmFlows {
 
-  private[fcm] def fcmWithData[T](conf: FcmSettings,
-                                  sender: FcmSender): Flow[(FcmNotification, T), (FcmResponse, T), NotUsed] =
+  private[fcm] def fcmWithData[T](sender: FcmSender, maxConcurrentConnections: Int, isTest: Boolean)(
+      implicit settings: GoogleSettings
+  ): Flow[(FcmNotification, T), (FcmResponse, T), NotUsed] =
     Flow
       .fromMaterializer { (materializer, _) =>
-        import materializer.executionContext
-        val http = Http()(materializer.system)
-        val session: GoogleSession = new GoogleSession(conf.clientEmail,
-                                                       conf.privateKey,
-                                                       new GoogleTokenApi(http, materializer.system, conf.forwardProxy))
+        implicit val mat: Materializer = materializer
+        implicit val system: ActorSystem = materializer.system
+        val http = GoogleHttp()
+
         Flow[(FcmNotification, T)]
-          .mapAsync(conf.maxConcurrentConnections)(
+          .mapAsync(maxConcurrentConnections)(
             in =>
-              session.getToken()(materializer).flatMap { token =>
-                sender
-                  .send(conf, token, http, FcmSend(conf.isTest, in._1), materializer.system)(materializer)
-                  .zip(Future.successful(in._2))
-              }
+              sender
+                .send(http, FcmSend(isTest, in._1))
+                .zip(Future.successful(in._2))
           )
       }
       .mapMaterializedValue(_ => NotUsed)
 
-  private[fcm] def fcm(conf: FcmSettings, sender: FcmSender): Flow[FcmNotification, FcmResponse, NotUsed] =
+  private[fcm] def fcm(sender: FcmSender, maxConcurrentConnections: Int, isTest: Boolean)(
+      implicit settings: GoogleSettings
+  ): Flow[FcmNotification, FcmResponse, NotUsed] =
     Flow
       .fromMaterializer { (materializer, _) =>
-        import materializer.executionContext
-        val http = Http()(materializer.system)
-        val session: GoogleSession = new GoogleSession(conf.clientEmail,
-                                                       conf.privateKey,
-                                                       new GoogleTokenApi(http, materializer.system, conf.forwardProxy))
+        implicit val mat: Materializer = materializer
+        implicit val system: ActorSystem = materializer.system
+        val http = GoogleHttp()
+
         val sender: FcmSender = new FcmSender()
         Flow[FcmNotification]
-          .mapAsync(conf.maxConcurrentConnections)(
-            in =>
-              session.getToken()(materializer).flatMap { token =>
-                sender.send(conf, token, http, FcmSend(conf.isTest, in), materializer.system)(materializer)
-              }
+          .mapAsync(maxConcurrentConnections)(
+            in => sender.send(http, FcmSend(isTest, in))
           )
       }
       .mapMaterializedValue(_ => NotUsed)

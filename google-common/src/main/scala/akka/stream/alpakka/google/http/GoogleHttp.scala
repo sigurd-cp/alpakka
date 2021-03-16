@@ -30,7 +30,7 @@ private[alpakka] object GoogleHttp {
 }
 
 @InternalApi
-private[alpakka] final class GoogleHttp private (val http: HttpExt) extends AnyVal {
+private[alpakka] class GoogleHttp private (val http: HttpExt) {
 
   private implicit def system = http.system
   private implicit def ec = system.dispatcher
