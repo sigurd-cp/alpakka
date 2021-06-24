@@ -113,6 +113,29 @@ class ArchiveSpec
 
         archiveHelper.unzip(akkaZipped.futureValue).asScala shouldBe inputFiles
       }
+
+      "unarchive files" in {
+        val inputFiles = generateInputFiles(5, 100)
+        val inputStream = filesToStream(inputFiles)
+        val zipFlow = Archive.zip()
+
+        val akkaZipped: Future[ByteString] =
+          inputStream
+            .via(zipFlow)
+            .runWith(Sink.fold(ByteString.empty)(_ ++ _))
+
+        val tempFi = File.createTempFile("pre", "post")
+        tempFi.deleteOnExit()
+
+        Source.future(akkaZipped).runWith(FileIO.toPath(tempFi.toPath)).futureValue
+
+        Archive
+          .zipReader(tempFi)
+          .map(f => f._1.name -> f._2.runWith(Sink.fold(ByteString.empty)(_ ++ _)).futureValue)
+          .runWith(Sink.seq)
+          .futureValue
+          .toMap shouldBe inputFiles
+      }
     }
   }
 
