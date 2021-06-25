@@ -12,6 +12,7 @@ import akka.japi.Pair
 import akka.stream.alpakka.file.impl.archive.{TarReaderStage, ZipArchiveMetadata, ZipSource}
 import akka.stream.javadsl.Source
 
+import java.io.InputStream;
 import java.io.File
 
 /**
@@ -31,15 +32,15 @@ object Archive {
   /**
    * Flow for reading ZIP files.
    */
-  def zipReader(file: File, chunkSize: Int): Source[Pair[ZipArchiveMetadata, Source[ByteString, NotUsed]], NotUsed] =
+  def zipReader(in: InputStream, chunkSize: Int): Source[Pair[ZipArchiveMetadata, ByteString], NotUsed] =
     Source
-      .fromGraph(new ZipSource(file, chunkSize))
+      .fromGraph(new ZipSource(in, chunkSize))
       .map(func {
         case (metadata, source) =>
-          Pair(metadata, source.asJava)
+          Pair(metadata, source)
       })
-  def zipReader(file: File): Source[Pair[ZipArchiveMetadata, Source[ByteString, NotUsed]], NotUsed] =
-    zipReader(file, 8192)
+  def zipReader(in: InputStream): Source[Pair[ZipArchiveMetadata, ByteString], NotUsed] =
+    zipReader(in, 8192)
 
   /**
    * Flow for packaging multiple files into one TAR file.
